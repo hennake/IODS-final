@@ -52,7 +52,7 @@ surface_area                Leaf surface area (cm2)
 SLA                         Specific leaf area (mm2/g)
 ```
 
-Thanks to PhD [jtuimala](https://jtuimala.github.io/IODS-final/) for pointing out this data set to me. (After reading his final report, one has to wonder if PhD actually stands for Pokémon-hunting Doctor.)
+Thanks to PhD [jtuimala](https://jtuimala.github.io/IODS-final/) for pointing out this data set to me. (After reading his final report, one has to wonder if PhD actually stands for PokÃ©mon-hunting Doctor.)
 ```{r read-in, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 library(tidyr)
 library(dplyr)
