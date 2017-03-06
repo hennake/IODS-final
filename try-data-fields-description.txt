@@ -1,0 +1,24 @@
+Data File Fields
+
+File ID: 7
+File name: FunctionalEcologyFE-2014-00595.R2.zip
+
+Field name	Description
+Family	Plant family
+Genus	Plant genus
+species	Plant species
+bar_code	Unique identifier for each individual in the Bridge db
+plot_code	Plot identification in the Bridge database
+X	X coordinate of position of individual in the plot (in meter)
+Y	Y coordinate of position of individual in the plot (in meter)
+DBH	Tree diameter at breast height (cm)
+leaf_thickness	Leaf thickness (micro m)
+leaf_toughness	Leaf toughness, measured by penetrometer (Newton)
+sapwood_density	Sapwood density (g/cm3)
+N	Leaf nitrogen concentration (g/g)
+C_N	Leaf carbon/nitrogen ratio 
+N15	Leaf delta Nitrogen 15 concentration (per mill)
+C13	Leaf delta Carbon 13 concentration (per mill)
+chlorophyll_concentration	Leaf chlorophyll concentration (micro g/mm2)
+surface_area	Leaf surface area (cm2)
+SLA	Specific leaf area (mm2/g)

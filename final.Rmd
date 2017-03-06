@@ -1,0 +1,229 @@
+---
+title: "IODS Final Assignment"
+author: "Henna Kettunen"
+email: "henna.kettunen@kapsi.fi"
+date: "3 maaliskuuta 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Abstract
+
+This is a report for the final assignment of IODS course. 
+
+
+## Research question
+
+Can we use mutinomial logistic regression to identify tropical tree genera based on observed leaf and stem traits?
+
+
+## Data description
+
+The data set used in this assignment is an extract of the BRIDGE database for leaf and stem traits collected from French Guiana. There are data on (at least) 646 different tropical tree species belonging to 222 genera and 59 families in this data set. 
+
+Reference to data package:
+Paine CET, Baraloto C, Diaz S (2015) Selected leaf and stem traits from the BRIDGE database. 
+
+Data from: Optimal strategies for sampling functional traits in species-rich forests. TRY Downloadable Files Archive https://www.try-db.org/TryWeb/Data.php#7
+
+The data include the following 18 variables that describe leaf and stem traits:
+```
+Field name                  Description
+Family                      Plant family
+Genus                       Plant genus
+species                     Plant species
+bar_code                    Unique identifier for each individual in the Bridge db
+plot_code                   Plot identification in the Bridge database
+X                           X coordinate of position of individual in the plot (in meter)
+Y                           Y coordinate of position of individual in the plot (in meter)
+DBH                         Tree diameter at breast height (cm)
+leaf_thickness              Leaf thickness (micro m)
+leaf_toughness              Leaf toughness, measured by penetrometer (Newton)
+sapwood_density             Sapwood density (g/cm3)
+N                           Leaf nitrogen concentration (g/g)
+C_N                         Leaf carbon/nitrogen ratio 
+N15                         Leaf delta Nitrogen 15 concentration (per mill)
+C13                         Leaf delta Carbon 13 concentration (per mill)
+chlorophyll_concentration   Leaf chlorophyll concentration (micro g/mm2)
+surface_area                Leaf surface area (cm2)
+SLA                         Specific leaf area (mm2/g)
+```
+
+Thanks to PhD [jtuimala](https://jtuimala.github.io/IODS-final/) for pointing out this data set to me. (After reading his final report, one has to wonder if PhD actually stands for Pokémon-hunting Doctor.)
+```{r read-in, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+library(tidyr)
+library(dplyr)
+
+# Tropical tree leaf data from BRIDGE database obtained via TRY
+trees <- read.csv("trees.csv")
+
+# Combine genus and species to a same column
+trees$name <- paste0(trees$Genus, "_", trees$species)
+
+# How many families? 59
+famn <- summarise(trees, nfam=n_distinct(Family))
+
+# How many genera? 222
+genn <- summarise(trees, nfam=n_distinct(Genus))
+
+# How many species? 646
+specn <- summarise(trees, nfam=n_distinct(name))
+```
+
+
+## Data manipulation
+
+First, I created a new variable `name`, which combines genus and species to a same column, and eases with calculating summaries on species-level. I had an intent to analyse the data on species-level, but it turned out that there were generally only several observations per species, and no species with more than 31 complete observations. This hardly provides the amount of variation necessary for most statistical methods. Imputing might have helped with the missing observations, but as I am no expert on that topic, I decided to use the complete cases only. (Suggestion: maybe you could introduce imputing as an IODS course topic next year, please?)
+```{r specn, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Combine genus and species to a same column
+trees$name <- paste0(trees$Genus, "_", trees$species)
+
+# How many observations per species?
+nobs <- count(trees[complete.cases(trees)==T,], name)
+nobs <- arrange(nobs, desc(n))
+nobs[1:10,]
+```
+
+Therefore, I changed the focus to genus-level, and found out that there are six genera with at least 50 complete observations in the data. These belong to four different plant families, and comprise 107 different species. I limited the data to these six genera, included only the complete cases, and removed variables `Family`, `species`, `bar_code`, `plot_code`, `X`, `Y` and `name` from the limited data. Hence, I ended up with 12 variables and 520 rows of data. All the remaining variables were numerical and continuous, except `Genus`, which was categorical. I didn't standardize the variables, as regression models are easier to interpret if fitted on unstandardized data.
+```{r genn, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# How many observations per genus?
+nobsg <- trees[complete.cases(trees),] %>% group_by(Genus) %>% summarise(nobs=n())
+nobsg <- arrange(nobsg, desc(nobs))
+
+# Genera with >= 50 observations
+gen50 <- nobsg[which(nobsg$nobs>=50),]
+gen50 <- gen50[gen50$Genus!="IND",]
+
+# How many observations?
+fam50 <- unique(trees[trees$Genus %in% gen50$Genus, c("Family","Genus")])
+fam50$n.obs <- gen50$nobs[match(fam50$Genus, gen50$Genus)]
+
+# 6 genera with >=50 complete cases belonging to 4 different families selected for further analyses
+dat <- trees[complete.cases(trees) & trees$Genus %in% gen50$Genus,]
+specn2 <- length(unique(dat$name))
+
+# Number of species per genus
+nspec2 <- dat %>% group_by(Genus) %>% summarise(nspec=n_distinct(species))
+fam50$n.spec <- nspec2$nspec[match(fam50$Genus, nspec2$Genus)]
+fam50
+
+# Drop unnecessary variables
+keep <- c("Genus","DBH","leaf_thickness","leaf_toughness","sapwood_density","N","C_N","N15","C13","chlorophyll_concentration","surface_area","SLA")
+dat <- dat[,keep]
+```
+
+The code for data wrangling can be found [here](wrangle.r).
+
+
+## Explorative analysis
+
+```{r exp1, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Summary
+summary(dat)
+
+# Histograms
+library(reshape2)
+library(ggplot2)
+mdat <- melt(dat)
+ggplot(mdat, aes(value)) + geom_histogram(fill="red") + facet_wrap(~ variable, scales="free")
+```
+
+The histograms show that most variables in the scaled data are unimodal, but there are some (`leaf_toughness`, `N` and `C13`) that are slightly multimodal (but this can depend on the binwidth of histograms). Variables `DBH`, `leaf_thickness`, `N`, `C_N`, `chlorophyll_concentration`, `surface_area` and `SLA` are clearly skewed to right, and `sapwood_density` is skewed to left. No variable seems to be exactly normally distributed.
+
+```{r exp2, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Correlation matrix
+library(corrplot)
+cor_matrix <- cor(dat[,2:ncol(dat)]) 
+corrplot(cor_matrix, method="circle", type="upper", cl.pos="b", tl.pos="d", tl.cex=0.6)
+```
+
+The correlation matrix reveals that there are high correlations between variables `leaf thickness` and `leaf toughness`, `N` and `C_N`, and `leaf_thickness` and `SLA`. This may cause a multicollinearity problem in the analysis, so we drop one variable from each pair. `C_N` is a derivative variable calculated from `N`, and thus can be dropped. Also `SLA` might be best to drop, as it correlates with many other variables. There is no clear data-based indication for which one to keep of the variable pair `leaf_thickness` and `leaf_toughness`, but I chose to drop the latter one. Now the data consist of 9 variables.
+```{r exp3, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.width=10, fig.height=10}
+# Drop correlated variables
+drop <- c("leaf_toughness", "C_N", "SLA")
+dat <- dat[,!colnames(dat) %in% drop]
+dat$Genus <- droplevels(dat$Genus)
+
+# Scatterplot matrix
+pairs(dat, cex=0.5, pch=16, col=dat$Genus)
+```
+
+No variable alone seems to identificate different genera in the pairplot, but the data is highly multidimensional, and a combination of variables might provide better classification results.
+
+
+## Multinomial logistic regression
+
+Multinomial logistic regression is a classification method, which generalizes logistic regression to multiclass classification problems, i.e. settings with more than two possible outcome classes. The advantage of multinomial logistic regression compared to another multiclass classification method, linear discriminant analysis (LDA), is that the multinomial logistic regression model can include both numerical and categorical predictor variables, whereas LDA only can include continuous numerical predictors. All possible predictors in my data were actually continuous, but I wanted to give a try to multinomial model, as I had never tried it earlier. 
+
+There are at least two possible functions to fit multinomial logistic regression model with in R: function `multinom()` from package `nnet`, and function `mlogit()` from package `mlogit`. I chose the former one, which accepts data in a wide format. The latter one requires the data to be reshaped to a long format. Before starting with multinomial modelling, I divided the data to mutually exclusive train and test sets of equal size. In the code below, this division was frozen to an earlier run to ensure that the results correspond to ones presented in the following text.
+
+```{r mult1, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Divide to training and test sets
+# ind <- sample(nrow(dat), nrow(dat)*0.5)
+# save(ind, file="ind.RData")
+load("ind.RData")
+train <- dat[ind,]
+test <- dat[-ind,]
+```
+
+The first model I fitted was a model with all possible predictor variables included. For simplicity, I only considered the main effects model with no polynomial terms. This model correctly predicted genus in 47 % of test cases.
+```{r mult2, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Full main effects model
+library(nnet)
+fit1 <- multinom(Genus ~ ., data = train)
+pred1 <- predict(fit1, newdata=test)
+genus <- test$Genus
+tab <- table(pred=pred1, obs=genus)
+tab2 <- as.data.frame(tab)
+# Correct rate
+cor1 <- sum(tab2$Freq[tab2$pred==tab2$obs])/nrow(test)
+tab
+corg <- tab2[tab2$pred==tab2$obs,c("pred","Freq")]
+cor1
+```
+
+There is a high chance that a model fitted with all possible predictor variables present in the data will be overparametrisized, which means that the model predicts well the training data, but generalizes poorly to new data. To avoid overfitting, I utilized a backward model selection algorithm. Selection algorithms are generally regarded as a quick-and-dirty solution to model selection, but I didn't have the time and skills necessary for using more sophisticated methods. The idea of backward selection is to minimize the AIC value (Akaike information criterion) by dropping uninformative predictor variables from the model. AIC is a likelihood-based measure for model fit, which compares a collection of models relative to each other. Thus, an absolute AIC value tells us not much about goodness of fit, but a lower AIC relative to a higher one means a better-fitting model.
+```{r mult3, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Model selection
+library(MASS)
+step <- stepAIC(fit1, direction="backward")
+```
+
+The best model chosen by backward selection includes six predictor variables: Genus ~ Intercept + leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area. Let's fit this model as the second model, and produce predictions for the test data with it.
+```{r mult4, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Best model according to AIC
+fit2 <- multinom(Genus ~ leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area, data = train)
+pred2 <- predict(fit2, newdata=test)
+pred2p <- as.data.frame(fitted(fit2))
+tab3 <- table(pred=pred2, obs=genus)
+tab4 <- as.data.frame(tab3)
+# Correct rate
+cor2 <- sum(tab4$Freq[tab4$pred==tab4$obs])/nrow(test)
+cor2
+```
+
+The AIC of this model is 657.8, which is clearly lower compared to the first model (AIC = 669.9). The second model correctly predicts genus in 50.3 % of test cases, which is slightly better than for the first model. This can actually depend on how we divide the data into training and test sets. A better way of determining the error rate for different models would be by using crossvalidation, but the function cv.glm() we used in an earlier assignment to perform crossvalidation can't handle multinomial logistic models, so I didn't do crossvalidation here. In any case, both models are significantly better classificators than a simple strategy of guessing all trees to belong to genus Pouteria, which is the most common genus in the test data with 28.5 % cases.
+
+```{r mult5, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+tab3
+prop.table(tab3, 2)
+```
+
+Does the second model classify all genera with an equal accuracy? From a confusion matrix above, we can see that the model correctly classifies 92 % of Protium, but only 10 % of Lecythis and 11 % of Eschweilera. The model confuses the two latter to Pouteria, which is the most frequent genus in the test data.
+
+Model summary, anova test, and model visualization:
+```{r mult6, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+summary(fit2)
+library(car)
+Anova(fit2)
+library(visreg)
+visreg(fit2, xvar="leaf_thickness", collapse=T, type="conditional")
+```
+
+
+
+
+
