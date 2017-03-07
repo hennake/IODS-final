@@ -1,7 +1,8 @@
 ---
 title: "IODS Final Assignment"
 author: "Henna Kettunen"
-e-mail: "henna.kettunen ät kapsi.fi"
+email: "henna.kettunen@kapsi.fi"
+date: "2017-03-08"
 output:
   html_document:
     theme: cosmo

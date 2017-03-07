@@ -169,61 +169,104 @@ train <- dat[ind,]
 test <- dat[-ind,]
 ```
 
-The first model I fitted was a model with all possible predictor variables included. For simplicity, I only considered the main effects model with no polynomial terms. This model correctly predicted genus in 47 % of test cases.
-```{r mult2, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+The first model I fitted (Model 1) was a model with all possible predictor variables included. For simplicity, I only considered the main effects model with no polynomial terms. 
+```{r mult2, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, results="hide"}
 # Full main effects model
 library(nnet)
 fit1 <- multinom(Genus ~ ., data = train)
+
+```
+
+There is a high chance that a model fitted with a high number of predictor variables will overparametrized, which means that the model predicts well the training data, but generalizes poorly to new data. To avoid overfitting, I utilized a backward model selection algorithm. Selection algorithms are generally regarded as a quick-and-dirty solution to model selection, but I didn't have the time and skills necessary for using more sophisticated methods. The idea of backward selection is to minimize the AIC value (Akaike information criterion) by dropping uninformative predictor variables from the model. AIC is a likelihood-based goodness-of-fit measure, which compares a collection of models relative to each other. Hence, an absolute AIC value tells us not much about goodness of fit, but a lower AIC relative to a higher one means a better-fitting model.
+```{r mult3, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, results="hide"}
+# Model selection
+library(MASS)
+step <- stepAIC(fit1, direction="backward")
+```
+
+The best model chosen by backward selection includes six predictor variables: Genus ~ Intercept + leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area. Let's fit this model as Model 2, and give a closer look at the results.
+```{r mult4, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, results="hide"}
+# Best model according to AIC
+fit2 <- multinom(Genus ~ leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area, data = train)
+aic <- AIC(fit1, fit2)
+summary(fit2)
+```
+
+The AIC of Model 2 is 657.8, which is clearly lower compared to Model 1 (AIC = 669.9). We can see from the summary table that the model coefficients are estimated for each variable per class combination except for genus *Eschweilera*, which is selected as a reference class and not shown in the table. In a multinomial model with k response classes, we estimate k - 1 separate logistic regression models. The probability in each model is always calculated relative to the reference class. So for Model 2 we actually have five model equations:
+
+```
+(1) ln (p1 / p6) = -6.4 + 0.009 x lea_thi - 4.7 x sap_den + 95.4 x N - 0.22 x C13 - 0.022 x chl_con - 0.003 x sur_are
+(2) ln (p2 / p6) = -36.1 + 0.015 x lea_thi + 13.4 x sap_den - 49.6 x N - 0.90 x C13 - 0.045 x chl_con - 0.041 x sur_are
+(3) ln (p3 / p6) = -8.6 + 0.012 x lea_thi - 10.3 x sap_den - 2.4 x N - 0.49 x C13 - 0.026 x chl_con - 0.028 x sur_are
+(4) ln (p4 / p6) = -23.9 + 0.004 x lea_thi + 8.4 x sap_den + 120.4 x N - 0.55 x C13 - 0.013 x chl_con - 0.016 x sur_are
+(5) ln (p1 / p6) = 10.0 - 0.020 x lea_thi - 17.0 x sap_den - 230.5 x N - 0.31 x C13 - 0.002 x chl_con - 0.003 x sur_are
+```
+
+where p1 is the probability for *Lecythis*, p2 for *Licania*, p3 for *Micropholis*, p4 for *Pouteria*, p5 for *Protium* and p6 for *Eschweilera*.
+
+But how do we estimate the probability for genus *Eschweilera*, which is used as a reference? From the fact that the estimated probabilities across all genera evidently sum up to 1, we can derive the following probability formula for *Eschweilera*:
+
+```
+(6) p6 = 1 / (1 + exp(eq. 1) + exp(eq. 2) + ... + exp(eq. 5))
+```
+
+From the equation 1 we can see for example that 
+
+* a one-unit increase in the variable `leaf_thickness` is associated with the increase in the log odds of belonging to genus *Licania* vs. *Eschweilera* by the amount of 0.009
+* a one-unit increase in the variable `sapwood_density` is associated with the decrease in the log odds of belonging to genus *Licania* vs. *Eschweilera* by the amount of 4.7
+
+In logistic regression we can express regression coefficients as odd ratios. In multinomial logistic regression we can respectively transform coefficients by exponentiation to relative risk ratios for unit change in a predictor variable.
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+round(exp(coef(fit2)), 3)
+```
+
+Are all predictor variables in Model 2 statistically significant? We can check that with an LR test.
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+library(car)
+Anova(fit2)
+```
+
+`C13` and `chlorophyll_concentration` don't seem to be statistically significant predictors for genera, whereas all the other predictors are significant. However, if we fit a third model by dropping the two statistically insignificant variables, the AIC for this model is a bit higher (658.2), implying a lower goodness-of-fit. So let's declare Model 2 as our final model.
+
+Finally, we can visualize Model 2 to get a better picture of predicted probabilities. Library `visreg` provides us a nice tool for this.
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.width=8, fig.height=6}
+library(visreg)
+visreg(fit2, xvar="leaf_thickness", collapse=T, type="conditional")
+```
+
+
+## Model validation
+
+How accurately do the fitted models classify new cases, and are there differences in their classification performance? Let's see and predict the test data with our models.
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# Model 1
 pred1 <- predict(fit1, newdata=test)
 genus <- test$Genus
 tab <- table(pred=pred1, obs=genus)
 tab2 <- as.data.frame(tab)
 # Correct rate
 cor1 <- sum(tab2$Freq[tab2$pred==tab2$obs])/nrow(test)
-tab
-corg <- tab2[tab2$pred==tab2$obs,c("pred","Freq")]
-cor1
-```
 
-There is a high chance that a model fitted with all possible predictor variables present in the data will be overparametrisized, which means that the model predicts well the training data, but generalizes poorly to new data. To avoid overfitting, I utilized a backward model selection algorithm. Selection algorithms are generally regarded as a quick-and-dirty solution to model selection, but I didn't have the time and skills necessary for using more sophisticated methods. The idea of backward selection is to minimize the AIC value (Akaike information criterion) by dropping uninformative predictor variables from the model. AIC is a likelihood-based measure for model fit, which compares a collection of models relative to each other. Thus, an absolute AIC value tells us not much about goodness of fit, but a lower AIC relative to a higher one means a better-fitting model.
-```{r mult3, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
-# Model selection
-library(MASS)
-step <- stepAIC(fit1, direction="backward")
-```
-
-The best model chosen by backward selection includes six predictor variables: Genus ~ Intercept + leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area. Let's fit this model as the second model, and produce predictions for the test data with it.
-```{r mult4, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
-# Best model according to AIC
-fit2 <- multinom(Genus ~ leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area, data = train)
+# Model 2
 pred2 <- predict(fit2, newdata=test)
 pred2p <- as.data.frame(fitted(fit2))
 tab3 <- table(pred=pred2, obs=genus)
 tab4 <- as.data.frame(tab3)
 # Correct rate
 cor2 <- sum(tab4$Freq[tab4$pred==tab4$obs])/nrow(test)
-cor2
 ```
 
-The AIC of this model is 657.8, which is clearly lower compared to the first model (AIC = 669.9). The second model correctly predicts genus in 50.3 % of test cases, which is slightly better than for the first model. This can actually depend on how we divide the data into training and test sets. A better way of determining the error rate for different models would be by using crossvalidation, but the function cv.glm() we used in an earlier assignment to perform crossvalidation can't handle multinomial logistic models, so I didn't do crossvalidation here. In any case, both models are significantly better classificators than a simple strategy of guessing all trees to belong to genus Pouteria, which is the most common genus in the test data with 28.5 % cases.
+The second model correctly predicts genus in 50.3 % of test cases, which is slightly better than for the first model (47 %). Note however that this can actually depend on how we divide the data into training and test sets. A better way of determining the error rate for different models would be by crossvalidation, but the function cv.glm() we used in an earlier assignment to perform crossvalidation can't handle multinomial logistic models, so I didn't crossvalidate here. 
 
-```{r mult5, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+Next, it would be useful to check if Model 2 classifies all genera with an equal accuracy.
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 tab3
-prop.table(tab3, 2)
+round(prop.table(tab3, 2), 3)
 ```
 
-Does the second model classify all genera with an equal accuracy? From a confusion matrix above, we can see that the model correctly classifies 92 % of Protium, but only 10 % of Lecythis and 11 % of Eschweilera. The model confuses the two latter to Pouteria, which is the most frequent genus in the test data.
+From the confusion matrix we can see that the model correctly classifies 92 % of *Protiums* and 69 % of *Pouterias*, but only 10 % of *Lecythises* and 11 % of *Eschweileras*. (These percentages are for true positive outcomes.) The model confuses the two latter genera to *Pouteria*, which is the most frequent genus in the test data. Also *Licania* and *Micropholis* are frequently confused with *Pouteria*. Obviously the model overestimates the frequency of *Protium* and *Pouteria* at the expense of other genera. In any case, both models are in overall significantly better classificators than a simple strategy of guessing all trees to belong to genus *Pouteria*, which is the most common genus in the test data with 28.5 % cases.
 
-Model summary, anova test, and model visualization:
-```{r mult6, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
-summary(fit2)
-library(car)
-Anova(fit2)
-library(visreg)
-visreg(fit2, xvar="leaf_thickness", collapse=T, type="conditional")
-```
-
-
+Multinomial logistic regression assumes independence of irrelevant alternatives (IIA), which means that te characteristics of one particular choice alternative (class) do not impact the relative probabilities of choosing other alternatives (classes). IIA can be tested e.g. by (Hausman-McFadden test)[http://finzi.psych.upenn.edu/library/mlogit/html/hmftest.html], but I ran out of time for testing IIA.
 
 
 
