@@ -1,21 +1,24 @@
 ---
 title: "IODS Final Assignment"
-author: "Henna Kettunen"
-email: "henna.kettunen@kapsi.fi"
+author: "Henna Kettunen, henna.kettunen ät kapsi.fi"
 date: "2017-03-08"
 output:
   html_document:
+    highlight: textmate
     theme: cosmo
     toc: true
+    toc_float: 
+      collapse: false
+      smooth_scroll: false
     toc_depth: 2
     fig_caption: true
-    fig_width: 6
-    fig_height: 4
+    fig_width: 7
+    fig_height: 6
     code_folding: hide
-
 ---
 
 ***
+
   
 ```{r child = "final.Rmd"}
 ```

@@ -2,7 +2,7 @@
 title: "IODS Final Assignment"
 author: "Henna Kettunen"
 email: "henna.kettunen@kapsi.fi"
-date: "3 maaliskuuta 2017"
+date: "2017-03-08"
 output: html_document
 ---
 
@@ -12,12 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Abstract
 
-This is a report for the final assignment of IODS course. 
-
-
-## Research question
-
-Can we use mutinomial logistic regression to identify tropical tree genera based on observed leaf and stem traits?
+This report addresses the question if we can identify tropical tree genera based on their leaf and stem traits. The data comprised six tree genera, and multinomial logistic regression was chosen as a classification method. Six leaf and stem traits were identified to be somewhat useful for classification purposes on a genus-level, but two genera could not be identified at all based on these traits. The considerable within-genus variation of leaf and stem traits due to a high number of species per genus clearly complicates the classification task. 
 
 
 ## Data description
@@ -52,7 +47,7 @@ surface_area                Leaf surface area (cm2)
 SLA                         Specific leaf area (mm2/g)
 ```
 
-Thanks to PhD [jtuimala](https://jtuimala.github.io/IODS-final/) for pointing out this data set to me. (After reading his final report, one has to wonder if PhD actually stands for Pokémon-hunting Doctor.)
+Thanks to PhD Jarno Tuimala for pointing out this data set to me. After reading his [final report](https://jtuimala.github.io/IODS-final/), one has to wonder if PhD actually stands for Pokémon-hunting Doctor!
 ```{r read-in, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 library(tidyr)
 library(dplyr)
@@ -76,7 +71,7 @@ specn <- summarise(trees, nfam=n_distinct(name))
 
 ## Data manipulation
 
-First, I created a new variable `name`, which combines genus and species to a same column, and eases with calculating summaries on species-level. I had an intent to analyse the data on species-level, but it turned out that there were generally only several observations per species, and no species with more than 31 complete observations. This hardly provides the amount of variation necessary for most statistical methods. Imputing might have helped with the missing observations, but as I am no expert on that topic, I decided to use the complete cases only. (Suggestion: maybe you could introduce imputing as an IODS course topic next year, please?)
+First, I created a new variable `name`, which combines genus and species to a same column, and eases with calculating summaries on species-level. I had an intent to analyse the data on species-level, but it turned out that there were generally only several observations per species, and no species with more than 31 complete observations, as shown below. This hardly provides the amount of variation necessary for most statistical methods. Imputing might have helped with the missing observations, but as I am no expert on that topic, I decided to use the complete cases only. (Suggestion: maybe you could introduce imputing as an IODS course topic next year, please?)
 ```{r specn, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 # Combine genus and species to a same column
 trees$name <- paste0(trees$Genus, "_", trees$species)
@@ -87,7 +82,7 @@ nobs <- arrange(nobs, desc(n))
 nobs[1:10,]
 ```
 
-Therefore, I changed the focus to genus-level, and found out that there are six genera with at least 50 complete observations in the data. These belong to four different plant families, and comprise 107 different species. I limited the data to these six genera, included only the complete cases, and removed variables `Family`, `species`, `bar_code`, `plot_code`, `X`, `Y` and `name` from the limited data. Hence, I ended up with 12 variables and 520 rows of data. All the remaining variables were numerical and continuous, except `Genus`, which was categorical. I didn't standardize the variables, as regression models are easier to interpret if fitted on unstandardized data.
+Therefore, I changed the focus to genus-level, and found out that there are six genera with at least 50 complete observations in the data. These belong to four different plant families, and comprise 107 different species, as shown below. I limited the data to these six genera, included only the complete cases, and removed variables `Family`, `species`, `bar_code`, `plot_code`, `X`, `Y` and `name` from the limited data. Hence, I ended up with 12 variables and 520 rows of data. All the remaining variables were numerical and continuous, except `Genus`, which was categorical. I didn't standardize the variables, as I find regression models easier to interpret if fitted on unstandardized data.
 ```{r genn, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 # How many observations per genus?
 nobsg <- trees[complete.cases(trees),] %>% group_by(Genus) %>% summarise(nobs=n())
@@ -120,7 +115,8 @@ The code for data wrangling can be found [here](wrangle.r).
 
 ## Explorative analysis
 
-```{r exp1, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+I calculated a basic summary of all variables, and checked their distributions with histograms: 
+```{r exp1, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.cap="Figure 1. Histograms for individual leaf and stem traits."}
 # Summary
 summary(dat)
 
@@ -131,17 +127,17 @@ mdat <- melt(dat)
 ggplot(mdat, aes(value)) + geom_histogram(fill="red") + facet_wrap(~ variable, scales="free")
 ```
 
-The histograms show that most variables in the scaled data are unimodal, but there are some (`leaf_toughness`, `N` and `C13`) that are slightly multimodal (but this can depend on the binwidth of histograms). Variables `DBH`, `leaf_thickness`, `N`, `C_N`, `chlorophyll_concentration`, `surface_area` and `SLA` are clearly skewed to right, and `sapwood_density` is skewed to left. No variable seems to be exactly normally distributed.
+Figure 1 shows that most variables in the data are unimodal, but some (`leaf_toughness`, `N` and `C13`) are slightly multimodal (but this can depend on the binwidth of histograms). Variables `DBH`, `leaf_thickness`, `N`, `C_N`, `chlorophyll_concentration`, `surface_area` and `SLA` are clearly skewed to right, and `sapwood_density` is skewed to left. All variables show some deviation from the normal distribution.
 
-```{r exp2, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+```{r exp2, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.cap="Figure 2. Correlation matrix for variables."}
 # Correlation matrix
 library(corrplot)
 cor_matrix <- cor(dat[,2:ncol(dat)]) 
 corrplot(cor_matrix, method="circle", type="upper", cl.pos="b", tl.pos="d", tl.cex=0.6)
 ```
 
-The correlation matrix reveals that there are high correlations between variables `leaf thickness` and `leaf toughness`, `N` and `C_N`, and `leaf_thickness` and `SLA`. This may cause a multicollinearity problem in the analysis, so we drop one variable from each pair. `C_N` is a derivative variable calculated from `N`, and thus can be dropped. Also `SLA` might be best to drop, as it correlates with many other variables. There is no clear data-based indication for which one to keep of the variable pair `leaf_thickness` and `leaf_toughness`, but I chose to drop the latter one. Now the data consist of 9 variables.
-```{r exp3, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.width=10, fig.height=10}
+Figure 2 reveals that there are high correlations between variables `leaf thickness` and `leaf toughness`, `N` and `C_N`, and `leaf_thickness` and `SLA`. This may cause a multicollinearity problem in the analysis, so we drop one variable from each pair. `C_N` is a derivative variable calculated from `N`, and thus can be dropped. Also `SLA` might be best to drop, as it correlates with many other variables. There is no clear data-based indication for which one to keep of the variable pair `leaf_thickness` and `leaf_toughness`, but I chose to drop the latter one. Now the data consist of 9 variables.
+```{r exp3, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.width=10, fig.height=10, fig.cap="Figure 3. Scatterplot matrix for variables."}
 # Drop correlated variables
 drop <- c("leaf_toughness", "C_N", "SLA")
 dat <- dat[,!colnames(dat) %in% drop]
@@ -151,15 +147,14 @@ dat$Genus <- droplevels(dat$Genus)
 pairs(dat, cex=0.5, pch=16, col=dat$Genus)
 ```
 
-No variable alone seems to identificate different genera in the pairplot, but the data is highly multidimensional, and a combination of variables might provide better classification results.
+No variable alone seems to identificate different genera (Figure 3), but the data is highly multidimensional, and a combination of variables might provide better classification results.
 
 
 ## Multinomial logistic regression
 
 Multinomial logistic regression is a classification method, which generalizes logistic regression to multiclass classification problems, i.e. settings with more than two possible outcome classes. The advantage of multinomial logistic regression compared to another multiclass classification method, linear discriminant analysis (LDA), is that the multinomial logistic regression model can include both numerical and categorical predictor variables, whereas LDA only can include continuous numerical predictors. All possible predictors in my data were actually continuous, but I wanted to give a try to multinomial model, as I had never tried it earlier. 
 
-There are at least two possible functions to fit multinomial logistic regression model with in R: function `multinom()` from package `nnet`, and function `mlogit()` from package `mlogit`. I chose the former one, which accepts data in a wide format. The latter one requires the data to be reshaped to a long format. Before starting with multinomial modelling, I divided the data to mutually exclusive train and test sets of equal size. In the code below, this division was frozen to an earlier run to ensure that the results correspond to ones presented in the following text.
-
+There are at least two possible functions to fit multinomial logistic regression model with in R: function `multinom()` from package `nnet`, and function `mlogit()` from package `mlogit`. I chose the former one, which accepts data in a wide format. The latter one requires the data to be reshaped to a long format. Before starting with multinomial modelling, I divided the data to mutually exclusive train and test sets of equal size. In the code (below), this division was fixed to an earlier run to ensure that the results correspond to ones presented in the following text.
 ```{r mult1, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 # Divide to training and test sets
 # ind <- sample(nrow(dat), nrow(dat)*0.5)
@@ -169,75 +164,88 @@ train <- dat[ind,]
 test <- dat[-ind,]
 ```
 
-The first model I fitted (Model 1) was a model with all possible predictor variables included. For simplicity, I only considered the main effects model with no polynomial terms. 
+The first model I fitted (Model 1) was a model with all possible predictor variables included. For simplicity, I only considered the main effects model with no polynomial terms. The summary of Model 1 is shown below.
 ```{r mult2, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, results="hide"}
 # Full main effects model
 library(nnet)
 fit1 <- multinom(Genus ~ ., data = train)
-
+```
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+summary(fit1, digits=2)
 ```
 
-There is a high chance that a model fitted with a high number of predictor variables will overparametrized, which means that the model predicts well the training data, but generalizes poorly to new data. To avoid overfitting, I utilized a backward model selection algorithm. Selection algorithms are generally regarded as a quick-and-dirty solution to model selection, but I didn't have the time and skills necessary for using more sophisticated methods. The idea of backward selection is to minimize the AIC value (Akaike information criterion) by dropping uninformative predictor variables from the model. AIC is a likelihood-based goodness-of-fit measure, which compares a collection of models relative to each other. Hence, an absolute AIC value tells us not much about goodness of fit, but a lower AIC relative to a higher one means a better-fitting model.
+There is a high chance that a model fitted with a high number of predictor variables will be overparametrized, which means that the model predicts well the training data, but generalizes poorly to new data. To avoid overfitting, I utilized a backward model selection algorithm. Selection algorithms are generally regarded as a quick-and-dirty solution to model selection, but I didn't have the time and skills necessary for using more sophisticated methods. The idea of backward selection is to minimize the AIC value (Akaike information criterion) by dropping uninformative predictor variables from the model. AIC is a likelihood-based goodness-of-fit measure, which compares a collection of models relative to each other. Hence, an absolute AIC value tells us not much about goodness of fit, but a lower AIC relative to a higher one means a better-fitting model.
 ```{r mult3, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, results="hide"}
 # Model selection
 library(MASS)
 step <- stepAIC(fit1, direction="backward")
 ```
 
-The best model chosen by backward selection includes six predictor variables: Genus ~ Intercept + leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area. Let's fit this model as Model 2, and give a closer look at the results.
+The best model chosen by backward selection includes six predictor variables: `Genus ~ Intercept + leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area`. Let's fit this model as Model 2, and give a closer look at the results (summary of the model shown below).
 ```{r mult4, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, results="hide"}
 # Best model according to AIC
 fit2 <- multinom(Genus ~ leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area, data = train)
 aic <- AIC(fit1, fit2)
-summary(fit2)
+```
+```{r mult, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+summary(fit2, digits=2)
 ```
 
-The AIC of Model 2 is 657.8, which is clearly lower compared to Model 1 (AIC = 669.9). We can see from the summary table that the model coefficients are estimated for each variable per class combination except for genus *Eschweilera*, which is selected as a reference class and not shown in the table. In a multinomial model with k response classes, we estimate k - 1 separate logistic regression models. The probability in each model is always calculated relative to the reference class. So for Model 2 we actually have five model equations:
+The AIC of Model 2 is 657.8, which is clearly lower compared to Model 1 (AIC = 669.9). We can see from the summary table that the model coefficients are estimated for each variable and class combination except for genus *Eschweilera*, which is selected as a reference class and as such not shown in the table. In a multinomial model with k response classes, we estimate k - 1 separate logistic regression models. The probability of a certain class is always calculated relative to the reference class. So actually we have five model equations for Model 2:
 
-```
-(1) ln (p1 / p6) = -6.4 + 0.009 x lea_thi - 4.7 x sap_den + 95.4 x N - 0.22 x C13 - 0.022 x chl_con - 0.003 x sur_are
-(2) ln (p2 / p6) = -36.1 + 0.015 x lea_thi + 13.4 x sap_den - 49.6 x N - 0.90 x C13 - 0.045 x chl_con - 0.041 x sur_are
-(3) ln (p3 / p6) = -8.6 + 0.012 x lea_thi - 10.3 x sap_den - 2.4 x N - 0.49 x C13 - 0.026 x chl_con - 0.028 x sur_are
-(4) ln (p4 / p6) = -23.9 + 0.004 x lea_thi + 8.4 x sap_den + 120.4 x N - 0.55 x C13 - 0.013 x chl_con - 0.016 x sur_are
-(5) ln (p1 / p6) = 10.0 - 0.020 x lea_thi - 17.0 x sap_den - 230.5 x N - 0.31 x C13 - 0.002 x chl_con - 0.003 x sur_are
-```
+(1) $ln (p_1 / p_6) = -6.4 + 0.009 * leathi - 4.7 * sapden + 95.4 * N - 0.22 * C13 - 0.022 * chlcon - 0.003 * surare$
+(2) $ln (p_2 / p_6) = -36.1 + 0.015 * leathi + 13.4 * sapden - 49.6 * N - 0.90 * C13 - 0.045 * chlcon - 0.041 * surare$
+(3) $ln (p_3 / p_6) = -8.6 + 0.012 * leathi - 10.3 * sapden - 2.4 * N - 0.49 * C13 - 0.026 * chlcon - 0.028 * surare$
+(4) $ln (p_4 / p_6) = -23.9 + 0.004 * leathi + 8.4 * sapden + 120.4 * N - 0.55 * C13 - 0.013 * chlcon - 0.016 * surare$
+(5) $ln (p_1 / p_6) = 10.0 - 0.020 * leathi - 17.0 * sapden - 230.5 * N - 0.31 * C13 - 0.002 * chlcon - 0.003 * surare$
 
-where p1 is the probability for *Lecythis*, p2 for *Licania*, p3 for *Micropholis*, p4 for *Pouteria*, p5 for *Protium* and p6 for *Eschweilera*.
+where $p_1$ is the probability for *Lecythis*, $p_2$ for *Licania*, $p_3$ for *Micropholis*, $p_4$ for *Pouteria*, $p_5$ for *Protium* and $p_6$ for *Eschweilera*.
 
 But how do we estimate the probability for genus *Eschweilera*, which is used as a reference? From the fact that the estimated probabilities across all genera evidently sum up to 1, we can derive the following probability formula for *Eschweilera*:
 
-```
-(6) p6 = 1 / (1 + exp(eq. 1) + exp(eq. 2) + ... + exp(eq. 5))
-```
+(6) $p_6 = 1 / (1 + e^{eq. 1} + e^{eq. 2} + ... + e^{eq. 5})$
 
-From the equation 1 we can see for example that 
+In all model equations, a positive coefficient signifies that the log-transformed relative risk ($p_i / p_6$) of belonging to a certain class increases when the predictor variable increases, with which the coefficient is associated. A coefficient lower than zero signifies that the log-transformed risk decreases when the predictor variable increases. From the equation 1 we can see for example that 
 
-* a one-unit increase in the variable `leaf_thickness` is associated with the increase in the log odds of belonging to genus *Licania* vs. *Eschweilera* by the amount of 0.009
-* a one-unit increase in the variable `sapwood_density` is associated with the decrease in the log odds of belonging to genus *Licania* vs. *Eschweilera* by the amount of 4.7
+* a one-unit increase in the variable `leaf_thickness` is associated with the increase in the log risk of belonging to genus *Licania* vs. *Eschweilera* by the amount of 0.009
+* a one-unit increase in the variable `sapwood_density` is associated with the decrease in the log risk of belonging to genus *Licania* vs. *Eschweilera* by the amount of 4.7
 
-In logistic regression we can express regression coefficients as odd ratios. In multinomial logistic regression we can respectively transform coefficients by exponentiation to relative risk ratios for unit change in a predictor variable.
+In logistic regression we can express regression coefficients as odd ratios. In multinomial logistic regression we can respectively transform model coefficients by exponentiation to relative risks (risk ratios) for unit change in a predictor variable.
 ```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 round(exp(coef(fit2)), 3)
 ```
 
-Are all predictor variables in Model 2 statistically significant? We can check that with an LR test.
+Are all predictor variables in Model 2 statistically significant? Let's perform 2-tailed Wald test to find out. The null hypothesis of this test is that the given coefficient is zero.
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+# 2-tailed Wald test
+z <- summary(fit2)$coefficients/summary(fit2)$standard.errors
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+round(p, 3)
+```
+
+The p-values of e.g. variable `leaf_thickness` are statistically significant for all genera except *Pouteria*. The significance of other variables also differs between genera. This signifies that our predictor variables have statistical effect only on some genera (those with a p-value < 0.05, which is the usual treshold). We can check the overall significance of predictors in the model with a likelihood-ratio test.
 ```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 library(car)
 Anova(fit2)
 ```
 
-`C13` and `chlorophyll_concentration` don't seem to be statistically significant predictors for genera, whereas all the other predictors are significant. However, if we fit a third model by dropping the two statistically insignificant variables, the AIC for this model is a bit higher (658.2), implying a lower goodness-of-fit. So let's declare Model 2 as our final model.
+Variable `C13` doesn't seem to be a statistically significant predictor for our genera (p > 0.05), whereas all the other predictors are significant. But if we drop `c13` from the model, resulting in Model 3, the AIC for this model is a bit higher (658.2) than for Model 2 (657.8). This implies a lower goodness-of-fit, so let's declare Model 2 as our final model.
 
-Finally, we can visualize Model 2 to get a better picture of predicted probabilities. Library `visreg` provides us a nice tool for this.
-```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.width=8, fig.height=6}
+Finally, we can visualize (part of) Model 2 to get a better picture of the predicted probabilities for each genus as a function of predictor variables. Library `visreg` provides us a nice tool for this. In order to avoid an overlength report, I present here plots only for two predictor variables (Figures 4 and 5).
+```{r fig.width=8, fig.height=6, fig.cap="Figure 4. Predicted probability (blue line) for each genera as a function of leaf thickness. The probability for Licania increases and for Pouteria decreases as leaf thickness increases. There seems to be no visible effect for other genera."}
 library(visreg)
 visreg(fit2, xvar="leaf_thickness", collapse=T, type="conditional")
+```
+
+```{r fig.width=8, fig.height=6, fig.cap="Figure 5. Predicted probability (blue line) for each genera as a function of sapwood density. The probabilities for *Licania* and *Pouteria* increase, and the probabilities for *Micropholis* and *Protium* decrease as sapwood density increases. There seems to be no visible effect for *Eschweilera* and *Lecythis*."}
+library(visreg)
+visreg(fit2, xvar="sapwood_density", collapse=T, type="conditional")
 ```
 
 
 ## Model validation
 
-How accurately do the fitted models classify new cases, and are there differences in their classification performance? Let's see and predict the test data with our models.
+How accurately does our model classify new cases? Let's see and predict the test data with it.
 ```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
 # Model 1
 pred1 <- predict(fit1, newdata=test)
@@ -256,7 +264,7 @@ tab4 <- as.data.frame(tab3)
 cor2 <- sum(tab4$Freq[tab4$pred==tab4$obs])/nrow(test)
 ```
 
-The second model correctly predicts genus in 50.3 % of test cases, which is slightly better than for the first model (47 %). Note however that this can actually depend on how we divide the data into training and test sets. A better way of determining the error rate for different models would be by crossvalidation, but the function cv.glm() we used in an earlier assignment to perform crossvalidation can't handle multinomial logistic models, so I didn't crossvalidate here. 
+Model 2 correctly predicts genus in 50.3 % of test cases, which is slightly better than for Model 1 (47 %). Note however that this can actually depend on how we divide the data into training and test sets. A better way of determining the error rate for different models would be by proper crossvalidation, but the function cv.glm() we used in an earlier assignment for this can't handle multinomial logistic models, so I didn't crossvalidate here. 
 
 Next, it would be useful to check if Model 2 classifies all genera with an equal accuracy.
 ```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
@@ -264,9 +272,14 @@ tab3
 round(prop.table(tab3, 2), 3)
 ```
 
-From the confusion matrix we can see that the model correctly classifies 92 % of *Protiums* and 69 % of *Pouterias*, but only 10 % of *Lecythises* and 11 % of *Eschweileras*. (These percentages are for true positive outcomes.) The model confuses the two latter genera to *Pouteria*, which is the most frequent genus in the test data. Also *Licania* and *Micropholis* are frequently confused with *Pouteria*. Obviously the model overestimates the frequency of *Protium* and *Pouteria* at the expense of other genera. In any case, both models are in overall significantly better classificators than a simple strategy of guessing all trees to belong to genus *Pouteria*, which is the most common genus in the test data with 28.5 % cases.
+We can see from the confusion matrix above that the model correctly classifies 92 % of *Protiums* and 69 % of *Pouterias*, but only 10 % of *Lecythises* and 11 % of *Eschweileras* in the test data (percentages presented are true positive rates). The model confuses the two latter genera with *Pouteria*, which is the most frequent genus in the test data. Also *Licania* and *Micropholis* are frequently confused with *Pouteria*. Obviously the model overestimates the frequency of *Protium* and *Pouteria* at the expense of other genera. Overall, our model is a better classificator than a simple strategy of guessing all trees to belong to genus *Pouteria*, which is the most common genus in the test data with 28.5 % of cases. On the other hand, the model seems to be quite useless for classifying data where *Lecythis* and *Eschweilera* are present.
 
-Multinomial logistic regression assumes independence of irrelevant alternatives (IIA), which means that te characteristics of one particular choice alternative (class) do not impact the relative probabilities of choosing other alternatives (classes). IIA can be tested e.g. by (Hausman-McFadden test)[http://finzi.psych.upenn.edu/library/mlogit/html/hmftest.html], but I ran out of time for testing IIA.
+So the classification performance of our model is modest at its best. But is the model even suitable for our data?  Multinomial logistic regression assumes independence of irrelevant alternatives (IIA), which means that the characteristics of one particular choice alternative (class) do not impact the relative probabilities of choosing other alternatives (classes). IIA can be tested e.g. by [Hausman-McFadden test](http://finzi.psych.upenn.edu/library/mlogit/html/hmftest.html), but unfortunately I ran out of the time for that.
+
+
+## Conclusion
+
+The fitted multinomial logistic regression model didn't perform especially well at the task of identifying six tropical tree genera, albeit the classification performance differed between the genera. Two genera, *Lecythis* and *Eschweilera*, could not virtually be differentiated from a third genus, *Pouteria*, at all. On the other hand, genus *Protium* could quite reliably be differentiated from the others. The results for the remaining genera were somewhere in between. It seems that apart from *Protium*, the distributions of measured leaf and stem traits were generally too similar across the genera in order to properly differentiate these from each other. It might be as well that classifying tropical trees at a genus-level based on their leaf and stem traits is not a beneficial task in the first place, as there are typically a considerable number of species in each genus due to the high diversity of habitats available in tropical forests. Hence, the within-genus variation in these traits might be very high compared to the variation between genera. Moreover, it would have been useful to rule out the possibility of spatial setting (=spatial autocorrelation) affecting the distribution of leaf and stem traits among genera, as there was some spatial information incorporated.
 
 
 

@@ -1,7 +1,7 @@
 # IODS final assignment
 # Henna Kettunen
 
-setwd("L:\\Users\\Henna\\storage\\r\\iods\\IODS-final")
+setwd("L:\\Users\\Henna\\storage\\r\\iods\\IODS-final\\IODS-final")
 
 library(tidyr)
 library(dplyr)

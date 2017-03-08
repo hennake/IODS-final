@@ -1,6 +1,14 @@
 # IODS final assignment
 # Henna Kettunen
 
+###############################################################
+#                                                             #
+# DISCLAIMER:                                                 #
+# It's a horrible mess here, please see the final.Rmd instead #
+#                                                             #
+###############################################################
+
+
 setwd("L:\\Users\\Henna\\storage\\r\\iods\\IODS-final\\IODS-final")
 
 library(tidyr)
@@ -62,6 +70,7 @@ fit2 <- multinom(Genus ~ leaf_thickness + sapwood_density + N + C13 + chlorophyl
 pred2 <- predict(fit2, newdata=test)
 pred2p <- as.data.frame(fitted(fit2))
 tab3 <- table(pred=pred2, obs=genus)
+tab3p <- round(prop.table(tab3, 2), 2)
 tab4 <- as.data.frame(tab3)
 # Correct rate
 cor2 <- sum(tab4$Freq[tab4$pred==tab4$obs])/nrow(test)
@@ -70,6 +79,10 @@ cor2
 # Model summary and odd ratios by exponentation
 summary(fit2)
 exp(coef(fit2))
+
+# LR test
+library(car)
+Anova(fit2)
 
 # 2-tailed Wald test
 z <- summary(fit2)$coefficients/summary(fit2)$standard.errors
@@ -97,6 +110,12 @@ corp
 
 # Visualization
 library(visreg)
+library(visreg)
 visreg(fit2, xvar="leaf_thickness", collapse=T, type="conditional")
+visreg(fit2, xvar="sapwood_density", collapse=T, type="conditional")
+visreg(fit2, xvar="N", collapse=T, type="conditional")
+visreg(fit2, xvar="C13", collapse=T, type="conditional")
+visreg(fit2, xvar="chlorophyll_concentration", collapse=T, type="conditional")
+visreg(fit2, xvar="surface_area", collapse=T, type="conditional")
 
 
