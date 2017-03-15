@@ -4,6 +4,7 @@ author: "Henna Kettunen, henna.kettunen ät kapsi.fi"
 date: "2017-03-08"
 output:
   html_document:
+    css: styles.css
     highlight: textmate
     theme: cosmo
     toc: true

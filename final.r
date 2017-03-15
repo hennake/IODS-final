@@ -110,7 +110,6 @@ corp
 
 # Visualization
 library(visreg)
-library(visreg)
 visreg(fit2, xvar="leaf_thickness", collapse=T, type="conditional")
 visreg(fit2, xvar="sapwood_density", collapse=T, type="conditional")
 visreg(fit2, xvar="N", collapse=T, type="conditional")
@@ -118,4 +117,5 @@ visreg(fit2, xvar="C13", collapse=T, type="conditional")
 visreg(fit2, xvar="chlorophyll_concentration", collapse=T, type="conditional")
 visreg(fit2, xvar="surface_area", collapse=T, type="conditional")
 
-
+library(stargazer)
+stargazer(fit1)

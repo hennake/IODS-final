@@ -3,7 +3,9 @@ title: "IODS Final Assignment"
 author: "Henna Kettunen"
 email: "henna.kettunen@kapsi.fi"
 date: "2017-03-08"
-output: html_document
+output: 
+  html_document:
+    css: styles.css
 ---
 
 ```{r setup, include=FALSE}
@@ -77,9 +79,10 @@ First, I created a new variable `name`, which combines genus and species to a sa
 trees$name <- paste0(trees$Genus, "_", trees$species)
 
 # How many observations per species?
+library(knitr)
 nobs <- count(trees[complete.cases(trees)==T,], name)
 nobs <- arrange(nobs, desc(n))
-nobs[1:10,]
+kable(nobs[1:10,], format="markdown", caption="Number of obs. per species")
 ```
 
 Therefore, I changed the focus to genus-level, and found out that there are six genera with at least 50 complete observations in the data. These belong to four different plant families, and comprise 107 different species, as shown below. I limited the data to these six genera, included only the complete cases, and removed variables `Family`, `species`, `bar_code`, `plot_code`, `X`, `Y` and `name` from the limited data. Hence, I ended up with 12 variables and 520 rows of data. All the remaining variables were numerical and continuous, except `Genus`, which was categorical. I didn't standardize the variables, as I find regression models easier to interpret if fitted on unstandardized data.
@@ -103,7 +106,7 @@ specn2 <- length(unique(dat$name))
 # Number of species per genus
 nspec2 <- dat %>% group_by(Genus) %>% summarise(nspec=n_distinct(species))
 fam50$n.spec <- nspec2$nspec[match(fam50$Genus, nspec2$Genus)]
-fam50
+kable(fam50, format="markdown", caption="Number of species per genus")
 
 # Drop unnecessary variables
 keep <- c("Genus","DBH","leaf_thickness","leaf_toughness","sapwood_density","N","C_N","N15","C13","chlorophyll_concentration","surface_area","SLA")
@@ -170,8 +173,9 @@ The first model I fitted (Model 1) was a model with all possible predictor varia
 library(nnet)
 fit1 <- multinom(Genus ~ ., data = train)
 ```
-```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
-summary(fit1, digits=2)
+```{r, echo=TRUE, results="asis", warning=FALSE, error=FALSE, message=FALSE, fig.width=10}
+library(stargazer)
+stargazer(fit1, type="html", single.row=TRUE, align=TRUE)
 ```
 
 There is a high chance that a model fitted with a high number of predictor variables will be overparametrized, which means that the model predicts well the training data, but generalizes poorly to new data. To avoid overfitting, I utilized a backward model selection algorithm. Selection algorithms are generally regarded as a quick-and-dirty solution to model selection, but I didn't have the time and skills necessary for using more sophisticated methods. The idea of backward selection is to minimize the AIC value (Akaike information criterion) by dropping uninformative predictor variables from the model. AIC is a likelihood-based goodness-of-fit measure, which compares a collection of models relative to each other. Hence, an absolute AIC value tells us not much about goodness of fit, but a lower AIC relative to a higher one means a better-fitting model.
@@ -187,8 +191,9 @@ The best model chosen by backward selection includes six predictor variables: `G
 fit2 <- multinom(Genus ~ leaf_thickness + sapwood_density + N + C13 + chlorophyll_concentration + surface_area, data = train)
 aic <- AIC(fit1, fit2)
 ```
-```{r mult, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
-summary(fit2, digits=2)
+```{r mult, echo=TRUE, results="asis", warning=FALSE, error=FALSE, message=FALSE, fig.width=10}
+library(stargazer)
+stargazer(fit2, type="html", single.row=TRUE, align=T)
 ```
 
 The AIC of Model 2 is 657.8, which is clearly lower compared to Model 1 (AIC = 669.9). We can see from the summary table that the model coefficients are estimated for each variable and class combination except for genus *Eschweilera*, which is selected as a reference class and as such not shown in the table. In a multinomial model with k response classes, we estimate k - 1 separate logistic regression models. The probability of a certain class is always calculated relative to the reference class. So actually we have five model equations for Model 2:
@@ -216,11 +221,11 @@ round(exp(coef(fit2)), 3)
 ```
 
 Are all predictor variables in Model 2 statistically significant? Let's perform 2-tailed Wald test to find out. The null hypothesis of this test is that the given coefficient is zero.
-```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, results="asis"}
 # 2-tailed Wald test
 z <- summary(fit2)$coefficients/summary(fit2)$standard.errors
 p <- (1 - pnorm(abs(z), 0, 1)) * 2
-round(p, 3)
+stargazer(round(p, 3), type="html", align=TRUE)
 ```
 
 The p-values of e.g. variable `leaf_thickness` are statistically significant for all genera except *Pouteria*. The significance of other variables also differs between genera. This signifies that our predictor variables have statistical effect only on some genera (those with a p-value < 0.05, which is the usual treshold). We can check the overall significance of predictors in the model with a likelihood-ratio test.
@@ -268,8 +273,9 @@ Model 2 correctly predicts genus in 50.3 % of test cases, which is slightly bett
 
 Next, it would be useful to check if Model 2 classifies all genera with an equal accuracy.
 ```{r, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
-tab3
-round(prop.table(tab3, 2), 3)
+library(knitr)
+kable(tab3, format="markdown", caption="Confusion matrix for Model 2", digits=0)
+kable(round(prop.table(tab3, 2), 3), format="markdown", caption="Relative confusion matrix for Model 2", digits=3)
 ```
 
 We can see from the confusion matrix above that the model correctly classifies 92 % of *Protiums* and 69 % of *Pouterias*, but only 10 % of *Lecythises* and 11 % of *Eschweileras* in the test data (percentages presented are true positive rates). The model confuses the two latter genera with *Pouteria*, which is the most frequent genus in the test data. Also *Licania* and *Micropholis* are frequently confused with *Pouteria*. Obviously the model overestimates the frequency of *Protium* and *Pouteria* at the expense of other genera. Overall, our model is a better classificator than a simple strategy of guessing all trees to belong to genus *Pouteria*, which is the most common genus in the test data with 28.5 % of cases. On the other hand, the model seems to be quite useless for classifying data where *Lecythis* and *Eschweilera* are present.
